@@ -38,7 +38,7 @@
 
 ### AI Perf. metrics
 
-- AI Response Feedback
+- AI Response Feedback (This captures direct user reactions (like thumbs up/down, or phrases like “that’s not what I meant”) to the AI’s answers. This data is gold for judging the accuracy and user satisfaction with generative models, and it helps fine-tune responses.)
 - Intent Recognition Accuracy
 
 
