@@ -8,7 +8,7 @@
 ## 2. Detect multiple languages and do analyze it as well
 
 <!-- - Use open multilingual models from sarvam, AI4Bharat, HF -->
-  - Identify the frustrated user requests and their intents and look the time and date and feedback
+- Identify the frustrated user requests and their intents and look the time and date and feedback
 
 
 ## Outcome metrics
