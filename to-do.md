@@ -45,3 +45,7 @@
 - Drop-off Points in Conversation Flows:
 What it tells you: This pinpoints specific stages or messages in a conversation where users are most likely to abandon the chat. It flags points of friction, confusion, unclear instructions, or where the bot simply fails to meet expectations.
   - Action: Dig into these points. Can you simplify the flow? Clarify the language? Provide better options?
+
+
+Ref:
+- https://quickchat.ai/post/chatbot-analytics
