@@ -1,7 +1,5 @@
 import streamlit as st
 import plotly.express as px
-import pandas as pd
-import plotly.graph_objects as go
 from src.data_loader import load_data
 from src.preprocessing import preprocess_data
 from src.nlp_analytics import analyze_sentiment

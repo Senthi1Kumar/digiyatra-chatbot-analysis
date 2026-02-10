@@ -1,9 +1,8 @@
 import streamlit as st
 import plotly.express as px
-import plotly.graph_objects as go
 from src.data_loader import load_data
 from src.preprocessing import preprocess_data
-from src.descriptive_analytics import get_key_metrics, get_hourly_volume, get_status_distribution, get_top_users
+from src.descriptive_analytics import get_key_metrics, get_status_distribution, get_top_users
 
 st.set_page_config(page_title="Overview - DigiYatra Analytics", page_icon="📊", layout="wide")
 

@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 def get_key_metrics(df: pd.DataFrame):
     """
