@@ -1,7 +1,3 @@
-1. Sentiment analysis for the user feedback, and the multiligual requests 
-<!-- 2. Security anlaysis of the user requests - anlayzing Harmful contents w.r.t time,  Guardrail layer -->
-
----
 # NLP Analytics
 
 ## 1. What are the customer's issues w/ the DigiYatra platform
