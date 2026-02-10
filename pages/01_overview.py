@@ -3,7 +3,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from src.data_loader import load_data
 from src.preprocessing import preprocess_data
-from src.descriptive_analytics import get_key_metrics, get_hourly_volume, get_status_distribution
+from src.descriptive_analytics import get_key_metrics, get_hourly_volume, get_status_distribution, get_top_users
 
 st.set_page_config(page_title="Overview - DigiYatra Analytics", page_icon="📊", layout="wide")
 
@@ -38,7 +38,7 @@ metrics = get_key_metrics(filtered_df)
 
 kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
 kpi1.metric("Total Requests", f"{metrics.get('total_requests', 0):,}")
-kpi2.metric("Unique Users", f"{metrics.get('total_users', 0):,}")
+kpi2.metric("Unique Sessions", f"{metrics.get('total_users', 0):,}", help="Based on unique Conversation IDs")
 kpi3.metric("Total Cost", f"${metrics.get('total_cost', 0):,.2f}")
 kpi4.metric("Avg Latency", f"{metrics.get('avg_latency', 0):.2f}s")
 kpi5.metric("Success Rate", f"{metrics.get('success_rate', 0):.1f}%")
@@ -86,3 +86,13 @@ if 'Hour' in filtered_df.columns and 'DayOfWeek' in filtered_df.columns:
         title="Request Intensity by Day & Hour"
     )
     st.plotly_chart(fig_heat, width='stretch')
+
+# --- Top 10 Active Sessions ---
+st.subheader("Top 10 Active Sessions (by Message Count)")
+top_users = get_top_users(filtered_df, n=10)
+if not top_users.empty:
+    fig_top = px.bar(top_users, x='Conversation ID', y='Message Count', title="Most Active Sessions")
+    st.plotly_chart(fig_top, width='stretch')
+else:
+    st.info("No conversation data available.")
+
