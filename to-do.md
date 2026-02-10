@@ -15,7 +15,7 @@
   - Identify the frustrated user requests and their intents and look the time and date and feedback
 
 
-## Main priorites to impelement
+## Outcome metrics
 
 - Show no. of Out-of-domain responses and requests
 
