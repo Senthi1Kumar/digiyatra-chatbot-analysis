@@ -288,22 +288,22 @@ def intent_summary(
     )
     return agg
 
-def generate_wordcloud_img(text_series: pd.Series):
-    """
-    Generate a WordCloud image from a pandas series of text.
-    """
-    text = ' '.join(text_series.dropna().astype(str).apply(clean_text))
+# def generate_wordcloud_img(text_series: pd.Series):
+#     """
+#     Generate a WordCloud image from a pandas series of text.
+#     """
+#     text = ' '.join(text_series.dropna().astype(str).apply(clean_text))
     
-    if not text.strip():
-        return None
+#     if not text.strip():
+#         return None
         
-    wordcloud = WordCloud(width=800, height=400, background_color='white', stopwords=STOP_WORDS).generate(text)
+#     wordcloud = WordCloud(width=800, height=400, background_color='white', stopwords=STOP_WORDS).generate(text)
     
-    # Create matplotlib figure
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis('off')
-    return fig
+#     # Create matplotlib figure
+#     fig, ax = plt.subplots(figsize=(10, 5))
+#     ax.imshow(wordcloud, interpolation='bilinear')
+#     ax.axis('off')
+#     return fig
 
 
 def language_quality_summary(
