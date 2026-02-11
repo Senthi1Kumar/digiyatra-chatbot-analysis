@@ -31,7 +31,30 @@
 pip install -r requirements.txt
 ```
 
-2. **Ensure Data is Present**:
+Note: this project uses PyTorch for some NLP models. Install the correct
+PyTorch wheel for your environment (CPU-only or CUDA-enabled GPU). Use
+`nvidia-smi` to check for an NVIDIA GPU and available CUDA version.
+
+- CPU-only (recommended if you don't have an NVIDIA GPU):
+
+```bash
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
+
+- CUDA-enabled GPU (example for CUDA 12.8):
+
+```bash
+# For Linux x86 use:
+pip3 install torch torchvision
+
+# For Linux Aarch64:
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+# For Windows
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
+
+2.**Ensure Data is Present**:
     Place your `all_requests.csv` file in the root directory.
 
 ## Running the Dashboard

@@ -1,4 +1,6 @@
+polars
 streamlit
+transformers
 pandas
 numpy
 scikit-learn

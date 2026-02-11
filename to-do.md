@@ -3,7 +3,6 @@
 ## 1. What are the customer's issues w/ the DigiYatra platform
 
 - Analyze the user's requests
-  - How:
 
 ## 2. Detect multiple languages and do analyze it as well
 
@@ -31,17 +30,13 @@
 
 - Fallback Rate (This is the percentage of user messages your chatbot flat-out doesn’t understand or can’t respond to appropriately. A high fallback rate, often calculated as ((Total Messages - Fallback Messages) / Total Messages) * 100, signals that its Natural Language Processing (NLP) needs work or its training data needs an update. NLP is the technology that allows computers to understand human language.)
 
-
 ### AI Perf. metrics
 
 - AI Response Feedback (This captures direct user reactions (like thumbs up/down, or phrases like “that’s not what I meant”) to the AI’s answers. This data is gold for judging the accuracy and user satisfaction with generative models, and it helps fine-tune responses.)
 - Intent Recognition Accuracy
-
-
 - Drop-off Points in Conversation Flows:
 What it tells you: This pinpoints specific stages or messages in a conversation where users are most likely to abandon the chat. It flags points of friction, confusion, unclear instructions, or where the bot simply fails to meet expectations.
   - Action: Dig into these points. Can you simplify the flow? Clarify the language? Provide better options?
-
 
 Ref:
 - https://quickchat.ai/post/chatbot-analytics
