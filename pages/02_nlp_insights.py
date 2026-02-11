@@ -1,13 +1,14 @@
 import streamlit as st
 import plotly.express as px
 import pandas as pd
+from sklearn.decomposition import PCA
 from src.data_loader import load_data
 from src.preprocessing import preprocess_data
 from src.nlp_analytics import (
     analyze_sentiment,
     extract_top_keywords,
     categorise_intent_basic,
-    detect_language,
+    detect_language_series,
     parse_user_feedback,
     add_frustration_index,
     intent_summary,
@@ -17,6 +18,7 @@ from src.nlp_analytics import (
     compute_csat_metrics,
     compute_chat_duration_metrics,
     compute_clarification_engagement_metrics,
+    annotate_tanaos_intent,
 )
 
 st.set_page_config(page_title="NLP Insights - DigiYatra", page_icon="🧠", layout="wide")
@@ -33,7 +35,8 @@ if df.empty:
 # --- Sample Control for Performance ---
 st.sidebar.subheader("Analysis Settings")
 sample_size = st.sidebar.slider("Sample Size (for heavy NLP tasks)", 1000, 50000, 10000, step=1000)
-use_sample = st.sidebar.checkbox("Use Sample", value=True)
+use_sample = st.sidebar.checkbox("Use Sample", value=False)
+use_tanaos = st.sidebar.checkbox("Use Tanaos intent model (GPU if available)", value=True)
 
 if use_sample:
     df_analysis = df.sample(n=min(sample_size, len(df)), random_state=42)
@@ -69,6 +72,11 @@ with st.spinner("Analyzing sentiment & frustration..."):
         else 'Conversation ID',
     )
 
+# --- Optional Tanaos intent annotation on the analysis sample ---
+if use_tanaos:
+    with st.spinner("Running Tanaos intent classifier on analysis sample..."):
+        df_analysis = annotate_tanaos_intent(df_analysis, text_col='Request')
+
 col1, col2 = st.columns(2)
 with col1:
     fig_sent = px.histogram(df_analysis, x='Sentiment_Polarity', nbins=20, title="Sentiment Polarity Distribution (-1 to 1)", color_discrete_sequence=['#636EFA'])
@@ -97,8 +105,8 @@ with col2:
         )
         st.plotly_chart(fig_scatter, width='stretch')
 
-# --- Pain Points / Intent-Level Summary ---
-st.subheader("Top User Pain Points by Intent")
+# --- Intent-Level Summary ---
+st.subheader("Top User Intents")
 intent_summary_df = intent_summary(df_analysis)
 if not intent_summary_df.empty:
     c1, c2 = st.columns(2)
@@ -121,14 +129,14 @@ if not intent_summary_df.empty:
             color_continuous_scale='Reds',
         )
         st.plotly_chart(fig_intent_frust, width='stretch')
-    st.dataframe(intent_summary_df, use_container_width=True)
+    st.dataframe(intent_summary_df, width='stretch')
 
 # --- Language Detection ---
 st.subheader("🌐 Multilingual Quality Analysis")
 with st.spinner("Detecting languages (sample)..."):
     # Sample for speed
     lang_sample = df_analysis.head(5000).copy()
-    lang_sample['Language'] = lang_sample['Request'].apply(detect_language)
+    lang_sample["Language"] = detect_language_series(lang_sample["Request"])
 
 lang_counts = lang_sample['Language'].value_counts().reset_index()
 lang_counts.columns = ['Language', 'Count']
@@ -202,6 +210,59 @@ if not keywords_df.empty:
     fig_words = px.bar(keywords_df, x='count', y='word', orientation='h', title="Top 20 Key Terms", color='count')
     fig_words.update_layout(yaxis={'categoryorder': 'total ascending'})
     st.plotly_chart(fig_words, width='stretch')
+
+# --- Tanaos Conversation-style Intents Overview ---
+if use_tanaos and 'Tanaos_Intent' in df_analysis.columns:
+    st.subheader("Conversation-style Intents (Tanaos model)")
+    tanaos_counts = df_analysis['Tanaos_Intent'].value_counts().reset_index()
+    tanaos_counts.columns = ['Intent', 'Count']
+    fig_tanaos = px.bar(
+        tanaos_counts,
+        x='Intent',
+        y='Count',
+        color='Intent',
+        title="Tanaos Conversation-style Intent Distribution (sample)",
+    )
+    st.plotly_chart(fig_tanaos, width='stretch')
+
+# --- 3D Intent & Sentiment Map ---
+st.subheader("3D Intent & Sentiment Map")
+feature_cols = []
+for col in ['Sentiment_Polarity', 'Frustration_Score']:
+    if col in df_analysis.columns:
+        feature_cols.append(col)
+if 'Tanaos_Intent_Score' in df_analysis.columns:
+    feature_cols.append('Tanaos_Intent_Score')
+
+if len(feature_cols) >= 2 and len(df_analysis) >= 10:
+    feats = df_analysis[feature_cols].fillna(0.0).to_numpy()
+    n_components = min(3, feats.shape[1])
+    pca = PCA(n_components=n_components, random_state=42)
+    coords = pca.fit_transform(feats)
+
+    df_plot = df_analysis.copy()
+    df_plot['x'] = coords[:, 0]
+    df_plot['y'] = coords[:, 1]
+    if n_components > 2:
+        df_plot['z'] = coords[:, 2]
+    else:
+        df_plot['z'] = 0.0
+
+    color_col = 'Tanaos_Intent' if 'Tanaos_Intent' in df_plot.columns else 'Intent'
+
+    fig_3d = px.scatter_3d(
+        df_plot,
+        x='x',
+        y='y',
+        z='z',
+        color=color_col,
+        hover_data=['Request', 'Intent'],
+        title="3D Cluster of Requests by Intent & Sentiment (PCA)",
+        opacity=0.7,
+    )
+    st.plotly_chart(fig_3d, use_container_width=True)
+else:
+    st.info("Not enough features or rows to build a 3D intent & sentiment map.")
 
 # # --- Token & Cost Overview ---
 # st.subheader("🧾 Token & Cost Overview")
@@ -282,7 +343,7 @@ with st.spinner("Discovering clusters of General/Other queries..."):
     clusters_df = cluster_unseen_queries(df_analysis, text_col='Request', intent_col='Intent')
 
 if not clusters_df.empty:
-    st.dataframe(clusters_df.head(15), use_container_width=True)
+    st.dataframe(clusters_df.head(15), width='stretch')
 else:
     st.info("Not enough 'General/Other' queries to form meaningful clusters right now.")
 

@@ -1,3 +1,5 @@
+import os
+import sys
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
@@ -6,20 +8,107 @@ import re
 from langdetect import detect, LangDetectException
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import pairwise_distances_argmin_min
+import torch
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from pathlib import Path
+
+_indiclid_model = None
+
+
+def _get_indiclid_model():
+    """
+    Lazy-load IndicLID model from local repo or pip package.
+    
+    Tries to import from local cloned repo first (IndicLID/Inference),
+    then falls back to pip-installed ai4bharat.IndicLID.
+    """
+    global _indiclid_model
+    if _indiclid_model is not None:
+        return _indiclid_model
+
+    try:
+        # Try local cloned repo first
+        base_dir = Path(__file__).resolve().parent.parent
+        indiclid_inference_path = base_dir / "IndicLID" / "Inference"
+        
+        if indiclid_inference_path.exists():
+            sys.path.insert(0, str(indiclid_inference_path))
+            os.chdir(str(indiclid_inference_path))
+        
+        from ai4bharat.IndicLID import IndicLID  # type: ignore
+        _indiclid_model = IndicLID(input_threshold=0.5, roman_lid_threshold=0.6)
+        return _indiclid_model
+    except Exception as e:
+        # Fallback: try pip-installed version
+        try:
+            from ai4bharat.IndicLID import IndicLID  # type: ignore
+            _indiclid_model = IndicLID(input_threshold=0.5, roman_lid_threshold=0.6)
+            return _indiclid_model
+        except Exception:
+            _indiclid_model = None
+            return None
+
+
+def _langdetect_fallback(text: str) -> str:
+    try:
+        if not isinstance(text, str) or len(text.strip()) < 3:
+            return "unknown"
+        return detect(text)
+    except LangDetectException:
+        return "unknown"
+    except Exception:
+        return "unknown"
+
 
 def detect_language(text: str) -> str:
     """
-    Detect language of text using langdetect.
-    Returns language code (e.g., 'en', 'hi') or 'unknown'.
+    Detect language of a single text using IndicLID when available,
+    otherwise langdetect.
+
+    Returns an IndicLID code (e.g. 'hin_Latn') or ISO code (e.g. 'en') or 'unknown'.
     """
-    try:
-        if not isinstance(text, str) or len(text.strip()) < 10:
-            return 'unknown'
-        return detect(text)
-    except LangDetectException:
-        return 'unknown'
-    except Exception:
-        return 'unknown'
+    if not isinstance(text, str) or len(text.strip()) < 1:
+        return "unknown"
+
+    model = _get_indiclid_model()
+    if model is not None:
+        try:
+            outputs = model.batch_predict([text.strip()], batch_size=1)
+            if outputs:
+                # Each output is (text, label, score)
+                _, label, _ = outputs[0]
+                return label or "unknown"
+        except Exception:
+            # Fall back to langdetect below
+            pass
+
+    return _langdetect_fallback(text)
+
+
+def detect_language_series(text_series: pd.Series) -> pd.Series:
+    """
+    Vectorised language detection over a pandas Series.
+
+    Uses IndicLID's batch_predict when available for efficiency,
+    otherwise falls back to langdetect per row.
+    """
+    if text_series.empty:
+        return text_series.copy()
+
+    model = _get_indiclid_model()
+    texts = text_series.fillna("").astype(str)
+
+    if model is not None:
+        try:
+            outputs = model.batch_predict(texts.tolist(), batch_size=64)
+            # outputs: list of (text, label, score)
+            labels = [o[1] if len(o) >= 2 and o[1] else "unknown" for o in outputs]
+            return pd.Series(labels, index=texts.index)
+        except Exception:
+            pass
+
+    # Fallback: langdetect per row
+    return texts.apply(_langdetect_fallback)
 
 def parse_user_feedback(feedback_str: str) -> dict:
     """
@@ -36,7 +125,7 @@ def parse_user_feedback(feedback_str: str) -> dict:
         return {'rating': None, 'comments': None}
 
 # Simple stop words list to avoid heavy downloads if simple is enough
-STOP_WORDS = set(['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd", 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers', 'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', "that'll", 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', "don't", 'should', "should've", 'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren', "aren't", 'couldn', "couldn't", 'didn', "didn't", 'doesn', "doesn't", 'hadn', "hadn't", 'hasn', "hasn't", 'haven', "haven't", 'isn', "isn't", 'ma', 'mightn', "mightn't", 'mustn', "mustn't", 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't", 'wasn', "wasn't", 'weren', "weren't", 'won', "won't", 'wouldn', "wouldn't"])
+# STOP_WORDS = set(['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd", 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers', 'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', "that'll", 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', "don't", 'should', "should've", 'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren', "aren't", 'couldn', "couldn't", 'didn', "didn't", 'doesn', "doesn't", 'hadn', "hadn't", 'hasn', "hasn't", 'haven', "haven't", 'isn', "isn't", 'ma', 'mightn', "mightn't", 'mustn', "mustn't", 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't", 'wasn', "wasn't", 'weren', "weren't", 'won', "won't", 'wouldn', "wouldn't"])
 
 def clean_text(text: str) -> str:
     """
@@ -56,24 +145,107 @@ def clean_text(text: str) -> str:
     
     return text
 
-def analyze_sentiment(df: pd.DataFrame, text_col='Request') -> pd.DataFrame:
+_indic_sent_tokenizer = None
+_indic_sent_model = None
+_indic_sent_device = None
+
+
+def _get_indic_sentiment_model():
     """
-    Add sentiment polarity and subjectivity columns.
-    Uses TextBlob for efficient, rule-based sentiment.
+    Lazy-load an IndicBERT-based sentiment classifier if configured.
+
+    Set INDIC_SENTIMENT_MODEL_ID to a Hugging Face model id that is
+    fine-tuned for sentiment classification (e.g., an IndicBERT variant).
+
+    If not configured or loading fails, returns (None, None, None).
     """
-    if text_col not in df.columns:
+    global _indic_sent_tokenizer, _indic_sent_model, _indic_sent_device
+    if _indic_sent_model is not None and _indic_sent_tokenizer is not None:
+        return _indic_sent_tokenizer, _indic_sent_model, _indic_sent_device
+
+    model_id = os.getenv("INDIC_SENTIMENT_MODEL_ID")
+    if not model_id:
+        return None, None, None
+
+    try:
+        _indic_sent_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _indic_sent_tokenizer = AutoTokenizer.from_pretrained(model_id)
+        _indic_sent_model = AutoModelForSequenceClassification.from_pretrained(model_id).to(
+            _indic_sent_device
+        )
+        _indic_sent_model.eval()
+        return _indic_sent_tokenizer, _indic_sent_model, _indic_sent_device
+    except Exception:
+        _indic_sent_tokenizer = None
+        _indic_sent_model = None
+        _indic_sent_device = None
+        return None, None, None
+
+
+def _indic_sentiment_batch(texts):
+    """
+    Run Indic sentiment model in batches, returning labels and scores.
+    """
+    tok, model, device = _get_indic_sentiment_model()
+    if tok is None or model is None:
+        return [], []
+
+    labels_out = []
+    scores_out = []
+    batch_size = 64
+    for i in range(0, len(texts), batch_size):
+        batch = [str(t) if not pd.isna(t) else "" for t in texts[i : i + batch_size]]
+        if not batch:
+            continue
+        enc = tok(
+            batch,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        ).to(device)
+        with torch.no_grad():
+            logits = model(**enc).logits
+        probs = torch.softmax(logits, dim=-1)
+        batch_scores, batch_ids = probs.max(dim=-1)
+        for score, idx in zip(batch_scores, batch_ids):
+            labels_out.append(model.config.id2label[int(idx)])
+            scores_out.append(float(score.cpu().item()))
+
+    return labels_out, scores_out
+
+
+def analyze_sentiment(df: pd.DataFrame, text_col: str = "Request") -> pd.DataFrame:
+    """
+    Add sentiment columns without internal sampling.
+
+    Always computes TextBlob-based polarity/subjectivity:
+    - Sentiment_Polarity
+    - Sentiment_Subjectivity
+
+    If an IndicBERT-based sentiment model is configured via INDIC_SENTIMENT_MODEL_ID,
+    also adds:
+    - Indic_Sentiment_Label
+    - Indic_Sentiment_Score
+    """
+    if df.empty or text_col not in df.columns:
         return df
-        
-    # Operate on a copy to avoid SettingWithCopy warnings
-    # Sampling for large datasets if needed, but TextBlob is reasonably fast
-    # For 1M rows, this might take a few minutes. We might want to cache or sample in the dashboard.
-    
+
+    # TextBlob sentiment baseline
     def get_sentiment(text):
         blob = TextBlob(str(text))
         return pd.Series([blob.sentiment.polarity, blob.sentiment.subjectivity])
 
-    # Apply directly
-    df[['Sentiment_Polarity', 'Sentiment_Subjectivity']] = df[text_col].apply(get_sentiment)
+    df[["Sentiment_Polarity", "Sentiment_Subjectivity"]] = df[text_col].apply(get_sentiment)
+
+    # Optional Indic sentiment
+    tok, model, device = _get_indic_sentiment_model()
+    if tok is not None and model is not None:
+        texts = df[text_col].astype(str).tolist()
+        labels, scores = _indic_sentiment_batch(texts)
+        if labels and len(labels) == len(df):
+            df["Indic_Sentiment_Label"] = labels
+            df["Indic_Sentiment_Score"] = scores
+
     return df
 
 
@@ -315,6 +487,12 @@ def language_quality_summary(
     Summarise core metrics by detected language.
 
     Requires a language column (use detect_language on Request).
+    
+    Returns metrics including:
+    - Count: number of messages per language
+    - Resolution_Rate: percentage (0-100) of successful/resolved messages
+    - Avg_Conv_Frustration: average frustration score (0-1) per language
+    - Other numeric column means (tokens, latency)
     """
     if df.empty:
         return pd.DataFrame()
@@ -322,7 +500,8 @@ def language_quality_summary(
     tmp = df.copy()
 
     if lang_col not in tmp.columns:
-        tmp[lang_col] = tmp[text_col].apply(detect_language)
+        # Use vectorised IndicLID-based detection when available
+        tmp[lang_col] = detect_language_series(tmp[text_col])
 
     if resolution_col in tmp.columns:
         tmp["Resolved"] = tmp[resolution_col].astype(str).str.lower().isin(
@@ -357,12 +536,16 @@ def language_quality_summary(
         .rename(
             columns={
                 lang_col: "Language",
-                "Resolved": "Resolution_Rate",
+                "Resolved": "Resolution_Rate_Decimal",
                 frustration_col: "Avg_Conv_Frustration",
             }
         )
-        .sort_values("Language")
     )
+    
+    # Convert resolution rate from 0-1 to 0-100 percentage for clarity
+    agg["Resolution_Rate"] = (agg["Resolution_Rate_Decimal"] * 100).round(1)
+    agg = agg.drop(columns=["Resolution_Rate_Decimal"])
+    agg = agg.sort_values("Language")
 
     return agg
 
@@ -597,6 +780,105 @@ def compute_clarification_engagement_metrics(
             }
         ]
     )
+
+
+_tanaos_tokenizer = None
+_tanaos_model = None
+_tanaos_device = None
+
+
+def _get_tanaos_model():
+    """
+    Lazy-load the tanaos/tanaos-intent-classifier-v1 model.
+
+    Uses GPU if available, otherwise CPU.
+    """
+    global _tanaos_tokenizer, _tanaos_model, _tanaos_device
+
+    if _tanaos_model is not None and _tanaos_tokenizer is not None:
+        return _tanaos_tokenizer, _tanaos_model, _tanaos_device
+
+    try:
+        _tanaos_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _tanaos_tokenizer = AutoTokenizer.from_pretrained("tanaos/tanaos-intent-classifier-v1")
+        _tanaos_model = AutoModelForSequenceClassification.from_pretrained(
+            "tanaos/tanaos-intent-classifier-v1"
+        ).to(_tanaos_device)
+        _tanaos_model.eval()
+        return _tanaos_tokenizer, _tanaos_model, _tanaos_device
+    except Exception:
+        # If transformers/torch is not available or model can't be loaded,
+        # leave globals as None so callers can handle gracefully.
+        _tanaos_tokenizer = None
+        _tanaos_model = None
+        _tanaos_device = None
+        return None, None, None
+
+
+def tanaos_intent_batch(texts, batch_size: int = 64):
+    """
+    Run the Tanaos intent classifier in batches.
+
+    Returns two lists: labels and scores (floats).
+    If the model is unavailable, returns ([], []).
+    """
+    tok, model, device = _get_tanaos_model()
+    if tok is None or model is None:
+        return [], []
+
+    labels_out = []
+    scores_out = []
+
+    for i in range(0, len(texts), batch_size):
+        batch = [str(t) if not pd.isna(t) else "" for t in texts[i : i + batch_size]]
+        if not batch:
+            continue
+        enc = tok(
+            batch,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        ).to(device)
+        with torch.no_grad():
+            logits = model(**enc).logits
+        probs = torch.softmax(logits, dim=-1)
+        batch_scores, batch_ids = probs.max(dim=-1)
+        for score, idx in zip(batch_scores, batch_ids):
+            labels_out.append(model.config.id2label[int(idx)])
+            scores_out.append(float(score.cpu().item()))
+
+    return labels_out, scores_out
+
+
+def annotate_tanaos_intent(
+    df: pd.DataFrame,
+    text_col: str = "Request",
+    label_col: str = "Tanaos_Intent",
+    score_col: str = "Tanaos_Intent_Score",
+) -> pd.DataFrame:
+    """
+    Attach Tanaos conversation-style intent labels to a dataframe.
+
+    - Uses GPU if available (via torch.cuda.is_available()).
+    - Treat low-confidence predictions (score < 0.5) as implicit fallback/unknown in analytics.
+    """
+    if df.empty or text_col not in df.columns:
+        return df
+
+    tok, model, device = _get_tanaos_model()
+    if tok is None or model is None:
+        # Model not available; just return df unchanged
+        return df
+
+    tmp = df.copy()
+    texts = tmp[text_col].astype(str).tolist()
+    labels, scores = tanaos_intent_batch(texts)
+    if not labels or len(labels) != len(tmp):
+        return tmp
+
+    tmp[label_col] = labels
+    tmp[score_col] = scores
+    return tmp
 
 
 def cluster_unseen_queries(

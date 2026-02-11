@@ -160,7 +160,7 @@ def run_metrics_report():
                 hole=0.3,
                 color_discrete_sequence=['#ff9999', '#66b3ff'],
             )
-            st.plotly_chart(engagement_fig, use_container_width=True)
+            st.plotly_chart(engagement_fig, width='stretch')
 
         with col2:
             response_fig = px.pie(
@@ -170,7 +170,7 @@ def run_metrics_report():
                 hole=0.3,
                 color_discrete_sequence=['#99ff99', '#ffcc99'],
             )
-            st.plotly_chart(response_fig, use_container_width=True)
+            st.plotly_chart(response_fig, width='stretch')
 
         # Summary table
         st.subheader("📋 Metrics Summary")
@@ -178,7 +178,7 @@ def run_metrics_report():
             "Metric": ["Total Conversations", "Total Messages", "Bounce Rate (%)", "Missed Rate (%)", "Fallback Rate (%)"],
             "Value": [total_conversations, len(df), round(bounce_rate, 2), round(missed_message_rate, 2), round(fallback_rate, 2)]
         })
-        st.dataframe(metrics_summary, use_container_width=True)
+        st.dataframe(metrics_summary, width='stretch')
 
         # Download button
         csv = metrics_summary.to_csv(index=False)
