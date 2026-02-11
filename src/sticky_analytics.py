@@ -1,8 +1,6 @@
 import pandas as pd
-import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import NMF
-import plotly.graph_objects as go
 
 def extract_topics_nmf(df: pd.DataFrame, text_col='Request', n_topics=5):
     """

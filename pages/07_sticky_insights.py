@@ -1,7 +1,6 @@
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-import pandas as pd
 from src.data_loader import load_data
 from src.preprocessing import preprocess_data
 from src.nlp_analytics import categorise_intent_basic

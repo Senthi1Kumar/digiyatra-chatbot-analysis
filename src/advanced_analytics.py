@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from src.nlp_analytics import analyze_sentiment
 
 def calculate_advanced_features(df: pd.DataFrame, conv_df: pd.DataFrame = None):

@@ -1,7 +1,3 @@
-1. Sentiment analysis for the user feedback, and the multiligual requests 
-<!-- 2. Security anlaysis of the user requests - anlayzing Harmful contents w.r.t time,  Guardrail layer -->
-
----
 # NLP Analytics
 
 ## 1. What are the customer's issues w/ the DigiYatra platform
@@ -12,7 +8,7 @@
 ## 2. Detect multiple languages and do analyze it as well
 
 <!-- - Use open multilingual models from sarvam, AI4Bharat, HF -->
-  - Identify the frustrated user requests and their intents and look the time and date and feedback
+- Identify the frustrated user requests and their intents and look the time and date and feedback
 
 
 ## Outcome metrics

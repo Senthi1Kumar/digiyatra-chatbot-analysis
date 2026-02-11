@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 def get_key_metrics(df: pd.DataFrame):
     """
@@ -11,7 +10,7 @@ def get_key_metrics(df: pd.DataFrame):
     metrics = {
         "total_requests": len(df),
         "total_conversations": df['Conversation ID'].nunique() if 'Conversation ID' in df.columns else 0,
-        "total_users": df['User ID'].nunique() if 'User ID' in df.columns else 0,
+        "total_users": df['Conversation ID'].nunique() if 'Conversation ID' in df.columns else 0,  # Using Conv ID as user proxy
         "total_cost": df['Cost'].sum() if 'Cost' in df.columns else 0,
         "avg_latency": df['Latency'].mean() if 'Latency' in df.columns else 0,
         "success_rate": (df['Status'] == 'success').mean() * 100 if 'Status' in df.columns else 0
@@ -50,3 +49,15 @@ def get_latency_stats(df: pd.DataFrame) -> dict:
         "p99": df['Latency'].quantile(0.99),
         "max": df['Latency'].max()
     }
+
+def get_top_users(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
+    """
+    Get top N users (by Conversation ID) with most messages.
+    """
+    if 'Conversation ID' not in df.columns:
+        return pd.DataFrame()
+        
+    top_users = df.groupby('Conversation ID').size().sort_values(ascending=False).head(n).reset_index()
+    top_users.columns = ['Conversation ID', 'Message Count']
+    return top_users
+
