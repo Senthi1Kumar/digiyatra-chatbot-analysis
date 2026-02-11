@@ -57,6 +57,15 @@ pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu12
 2.**Ensure Data is Present**:
     Place your `all_requests.csv` file in the root directory.
 
+3.**Environment (.env)**
+
+- Copy the example environment file as needed, **as of now working on this IndicLID & IndicBERT models to detect multilingual & sentiment analysis**:
+
+```bash
+cp .env.example .env
+# Edit .env to set file paths or config values
+```
+
 ## Running the Dashboard
 
 Run the Streamlit application:
