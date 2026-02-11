@@ -2,8 +2,6 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from textblob import TextBlob
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 import re
 from langdetect import detect, LangDetectException
 from sklearn.cluster import MiniBatchKMeans

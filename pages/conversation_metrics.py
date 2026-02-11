@@ -93,7 +93,7 @@ metrics_summary.to_csv("conversation_metrics_summary.csv", index=False)
 import streamlit as st
 import pandas as pd
 import re
-import matplotlib.pyplot as plt
+import plotly.express as px
 from pathlib import Path
 
 # Set page config
@@ -149,24 +149,28 @@ def run_metrics_report():
         col4.metric("Missed Message Rate", f"{missed_message_rate:.2f}%")
         col5.metric("Fallback Rate", f"{fallback_rate:.2f}%")
 
-        # Visualizations
+        # Visualizations (Plotly)
         col1, col2 = st.columns(2)
 
         with col1:
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.pie([bounced_conversations, total_conversations - bounced_conversations], 
-                   labels=['Bounced', 'Engaged'], autopct='%1.1f%%', 
-                   startangle=140, colors=['#ff9999', '#66b3ff'], explode=(0.07, 0), shadow=True)
-            ax.set_title('User Engagement (Bounce Rate)', fontsize=14, fontweight='bold')
-            st.pyplot(fig)
+            engagement_fig = px.pie(
+                names=['Bounced', 'Engaged'],
+                values=[bounced_conversations, max(total_conversations - bounced_conversations, 0)],
+                title='User Engagement (Bounce Rate)',
+                hole=0.3,
+                color_discrete_sequence=['#ff9999', '#66b3ff'],
+            )
+            st.plotly_chart(engagement_fig, use_container_width=True)
 
         with col2:
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.pie([len(df) - missed_messages, missed_messages], 
-                   labels=['Success', 'Missed/Fallback'], autopct='%1.1f%%', 
-                   startangle=140, colors=['#99ff99', '#ffcc99'], explode=(0, 0.15), shadow=True)
-            ax.set_title('NLP Response Quality', fontsize=14, fontweight='bold')
-            st.pyplot(fig)
+            response_fig = px.pie(
+                names=['Success', 'Missed/Fallback'],
+                values=[max(len(df) - missed_messages, 0), missed_messages],
+                title='Response Quality',
+                hole=0.3,
+                color_discrete_sequence=['#99ff99', '#ffcc99'],
+            )
+            st.plotly_chart(response_fig, use_container_width=True)
 
         # Summary table
         st.subheader("📋 Metrics Summary")
