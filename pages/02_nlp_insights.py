@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.express as px
 import pandas as pd
 from sklearn.decomposition import PCA
-from src.data_loader import load_data
+from src.data_loader import get_session_data
 from src.preprocessing import preprocess_data
 from src.nlp_analytics import (
     analyze_sentiment,
@@ -26,7 +26,10 @@ st.set_page_config(page_title="NLP Insights - DigiYatra", page_icon="🧠", layo
 st.title("🧠 NLP & Sentiment Analysis")
 
 with st.spinner("Loading data..."):
-    df = load_data("all_requests.csv")
+    df = get_session_data()
+    if df.empty:
+        st.error("❌ No data uploaded. Please upload a CSV file on the home page first.")
+        st.stop()
     df = preprocess_data(df)
 
 if df.empty:
@@ -256,11 +259,42 @@ if len(feature_cols) >= 2 and len(df_analysis) >= 10:
         y='y',
         z='z',
         color=color_col,
-        hover_data=['Request', 'Intent'],
+        hover_data=['Request', 'Intent', 'Conversation ID', 'Message ID'],
         title="3D Cluster of Requests by Intent & Sentiment (PCA)",
-        opacity=0.7,
+        opacity=0.8,
+        height=720,
     )
-    st.plotly_chart(fig_3d, use_container_width=True)
+    # slightly larger markers and improved layout for dashboard readability
+    fig_3d.update_traces(marker=dict(size=6))
+    fig_3d.update_layout(margin=dict(l=0, r=0, t=60, b=0))
+    st.plotly_chart(fig_3d, use_container_width=True, height=720)
+
+    # --- Small details panel (left) showing selected point details ---
+    # Streamlit does not provide native hover callbacks for Plotly charts, so
+    # provide two complementary interactions:
+    # 1) Hover tooltip (built-in) shows Request, Intent, Conversation ID, Message ID
+    # 2) Select a point index below to inspect full text and IDs in a small panel
+
+    # details_col1, details_col2 = st.columns([1, 3])
+    # with details_col1:
+    #     st.subheader("Point Details")
+    #     st.caption("Pick a point index to inspect (or hover over points for a tooltip)")
+    #     # Provide a selectbox of available indices for inspection
+    #     idx_options = df_plot.index.astype(str).tolist()
+    #     if idx_options:
+    #         selected_idx = st.selectbox("Select point index", options=idx_options, index=0)
+    #         sel_row = df_plot.loc[int(selected_idx)]
+    #         # Show concise info in a small card-like layout
+    #         st.markdown(f"**Conversation ID:** `{sel_row.get('Conversation ID', '')}`")
+    #         st.markdown(f"**Message ID:** `{sel_row.get('Message ID', '')}`")
+    #         st.markdown("**Request**:")
+    #         st.write(sel_row.get('Request', '')[:400])
+    #     else:
+    #         st.info("No points available to inspect.")
+
+    # with details_col2:
+    #     # Keep the right column empty so the details panel visually appears bottom-left
+    #     st.write("")
 else:
     st.info("Not enough features or rows to build a 3D intent & sentiment map.")
 

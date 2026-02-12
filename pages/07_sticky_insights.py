@@ -1,7 +1,7 @@
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-from src.data_loader import load_data
+from src.data_loader import get_session_data
 from src.preprocessing import preprocess_data
 from src.nlp_analytics import categorise_intent_basic
 from src.sticky_analytics import extract_topics_nmf, generate_sankey_data, analyze_friction
@@ -13,7 +13,10 @@ st.markdown("Deep-dive analytics designed to identify **User Journeys**, **Hidde
 
 # Load Data
 with st.spinner("Crunching advanced data..."):
-    df = load_data("all_requests.csv")
+    df = get_session_data()
+    if df.empty:
+        st.error("❌ No data uploaded. Please upload a CSV file on the home page first.")
+        st.stop()
     df = preprocess_data(df)
     
     # Ensure Intent exists (using your basic rule-based one first)

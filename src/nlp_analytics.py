@@ -26,25 +26,26 @@ def _get_indiclid_model():
     if _indiclid_model is not None:
         return _indiclid_model
 
+    import logging
     try:
         # Try local cloned repo first
         base_dir = Path(__file__).resolve().parent.parent
         indiclid_inference_path = base_dir / "IndicLID" / "Inference"
-        
         if indiclid_inference_path.exists():
             sys.path.insert(0, str(indiclid_inference_path))
             os.chdir(str(indiclid_inference_path))
-        
         from ai4bharat.IndicLID import IndicLID  # type: ignore
         _indiclid_model = IndicLID(input_threshold=0.5, roman_lid_threshold=0.6)
         return _indiclid_model
     except Exception as e:
+        logging.warning(f"IndicLID local import failed: {e}")
         # Fallback: try pip-installed version
         try:
             from ai4bharat.IndicLID import IndicLID  # type: ignore
             _indiclid_model = IndicLID(input_threshold=0.5, roman_lid_threshold=0.6)
             return _indiclid_model
-        except Exception:
+        except Exception as e2:
+            logging.error(f"IndicLID pip import failed: {e2}")
             _indiclid_model = None
             return None
 
@@ -70,18 +71,21 @@ def detect_language(text: str) -> str:
     if not isinstance(text, str) or len(text.strip()) < 1:
         return "unknown"
 
+    import logging
     model = _get_indiclid_model()
     if model is not None:
         try:
             outputs = model.batch_predict([text.strip()], batch_size=1)
             if outputs:
-                # Each output is (text, label, score)
-                _, label, _ = outputs[0]
+                # Each output is (text, label, score, model_name)
+                _, label, *_ = outputs[0]
                 return label or "unknown"
-        except Exception:
-            # Fall back to langdetect below
-            pass
+            else:
+                logging.warning(f"IndicLID batch_predict returned empty output for text: {text}")
+        except Exception as e:
+            logging.error(f"IndicLID batch_predict failed for text: {text} with error: {e}")
 
+    logging.info(f"Falling back to langdetect for text: {text}")
     return _langdetect_fallback(text)
 
 
@@ -95,18 +99,22 @@ def detect_language_series(text_series: pd.Series) -> pd.Series:
     if text_series.empty:
         return text_series.copy()
 
+    import logging
     model = _get_indiclid_model()
     texts = text_series.fillna("").astype(str)
 
     if model is not None:
         try:
             outputs = model.batch_predict(texts.tolist(), batch_size=64)
-            # outputs: list of (text, label, score)
+            # outputs: list of (text, label, score, model_name)
+            if not outputs or len(outputs) != len(texts):
+                logging.warning(f"IndicLID batch_predict returned {len(outputs)} outputs for {len(texts)} inputs.")
             labels = [o[1] if len(o) >= 2 and o[1] else "unknown" for o in outputs]
             return pd.Series(labels, index=texts.index)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(f"IndicLID batch_predict failed for series with error: {e}")
 
+    logging.info("Falling back to langdetect for language detection series.")
     # Fallback: langdetect per row
     return texts.apply(_langdetect_fallback)
 

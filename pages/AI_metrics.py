@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from src.data_loader import load_data
+from src.data_loader import get_session_data
 from src.preprocessing import preprocess_data
 from src.nlp_analytics import parse_user_feedback
 
@@ -13,15 +13,17 @@ st.set_page_config(page_title="AI Performance Metrics", layout="wide")
 
 st.title("🤖 AI Performance Metrics")
 st.caption(
-    "AI response feedback, intent recognition accuracy, and drop-off analysis, "
-    "aligned with the AI performance section of your to-do."
+    "AI response feedback, intent recognition accuracy, and drop-off analysis"
 )
 
 
 def run_ai_metrics_dashboard():
     # ---------------- 1. LOAD & PREP DATA ----------------
     with st.spinner("Loading data..."):
-        df = load_data("all_requests.csv")
+        df = get_session_data()
+        if df.empty:
+            st.error("❌ No data uploaded. Please upload a CSV file on the home page first.")
+            return
         df = preprocess_data(df)
 
     if df.empty:

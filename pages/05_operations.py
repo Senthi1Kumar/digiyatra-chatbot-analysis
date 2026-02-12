@@ -1,7 +1,7 @@
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from src.data_loader import load_data
+from src.data_loader import get_session_data
 from src.preprocessing import preprocess_data
 from src.descriptive_analytics import get_latency_stats
 
@@ -10,7 +10,10 @@ st.set_page_config(page_title="Operations - DigiYatra", page_icon="⚙️", layo
 st.title("⚙️ Operations & Cost Analysis")
 
 with st.spinner("Loading data..."):
-    df = load_data("all_requests.csv")
+    df = get_session_data()
+    if df.empty:
+        st.error("❌ No data uploaded. Please upload a CSV file on the home page first.")
+        st.stop()
     df = preprocess_data(df)
 
 if df.empty:

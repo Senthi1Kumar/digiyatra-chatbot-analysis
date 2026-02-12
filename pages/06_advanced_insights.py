@@ -1,6 +1,6 @@
 import streamlit as st
 import plotly.express as px
-from src.data_loader import load_data
+from src.data_loader import get_session_data
 from src.preprocessing import preprocess_data
 from src.nlp_analytics import analyze_sentiment
 from src.advanced_analytics import calculate_advanced_features, analyze_conversation_sentiment_flow, correlation_analysis
@@ -11,7 +11,10 @@ st.title("Insights")
 st.markdown("Statistical analysis to uncover hidden user behaviors and system anomalies.")
 
 with st.spinner("Loading & Processing Data (this may take a moment)..."):
-    df = load_data("all_requests.csv")
+    df = get_session_data()
+    if df.empty:
+        st.error("❌ No data uploaded. Please upload a CSV file on the home page first.")
+        st.stop()
     df = preprocess_data(df)
     
     # Calculate Basic Sentiment if not cached

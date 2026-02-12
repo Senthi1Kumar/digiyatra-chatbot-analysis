@@ -1,16 +1,19 @@
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-from src.data_loader import load_data
+from src.data_loader import get_session_data
 from src.preprocessing import preprocess_data
 from src.timeseries_analytics import resample_time_series, get_busiest_periods
 
-st.set_page_config(page_title="Time Series - DigiYatra", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Time Series - DigiYatra", page_icon="📊", layout="wide")
 
-st.title("📈 Time-Series Analysis")
+st.title("📊 Time-Series Analysis")
 
 with st.spinner("Loading data..."):
-    df = load_data("all_requests.csv")
+    df = get_session_data()
+    if df.empty:
+        st.error("❌ No data uploaded. Please upload a CSV file on the home page first.")
+        st.stop()
     df = preprocess_data(df)
 
 if df.empty:

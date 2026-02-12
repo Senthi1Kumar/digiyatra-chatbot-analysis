@@ -17,6 +17,10 @@ def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     if 'Timestamp' not in df.columns:
         return df
 
+    # 0. Parse Timestamp if it's still a string
+    if df['Timestamp'].dtype == 'object':
+        df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%d/%m/%Y, %H:%M:%S', errors='coerce')
+
     # 1. Temporal Features
     df['Date'] = df['Timestamp'].dt.date
     df['Hour'] = df['Timestamp'].dt.hour
