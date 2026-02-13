@@ -23,7 +23,7 @@ if df.empty:
 
 # --- Ensure Timestamp is datetime ---
 if 'Timestamp' in df.columns and df['Timestamp'].dtype == 'object':
-    df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%d/%m/%Y, %H:%M:%S', errors='coerce')
+    df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%m/%d/%Y, %I:%M:%S %p', errors='coerce')
 
 # Create a Date column for easier filtering (keep as datetime, not date object)
 if 'Timestamp' in df.columns:
