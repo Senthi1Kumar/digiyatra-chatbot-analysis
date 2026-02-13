@@ -70,7 +70,7 @@ def run_ai_metrics_dashboard():
                 title="AI Response Feedback Distribution",
                 hole=0.4,
             )
-            st.plotly_chart(fig_fb, use_container_width=True)
+            st.plotly_chart(fig_fb, width='stretch')
     else:
         st.info("No user feedback found in the dataset.")
 
@@ -109,7 +109,7 @@ def run_ai_metrics_dashboard():
     st.subheader("📉 Drop-off Points in Conversation Flows")
 
     if "Conversation ID" in df.columns and "Timestamp" in df.columns:
-        df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+        df["Timestamp"] = pd.to_datetime(df["Timestamp"], format='%m/%d/%Y, %I:%M:%S %p', errors="coerce")
         drop_off_data = (
             df.sort_values(["Conversation ID", "Timestamp"])
             .groupby("Conversation ID")
@@ -128,7 +128,7 @@ def run_ai_metrics_dashboard():
                 title="Top Conversation Drop-off Requests",
             )
             fig_drop.update_layout(yaxis=dict(automargin=True))
-            st.plotly_chart(fig_drop, use_container_width=True)
+            st.plotly_chart(fig_drop, width='stretch')
 
             st.caption(
                 "These are the final user requests in conversations that ended here — "
