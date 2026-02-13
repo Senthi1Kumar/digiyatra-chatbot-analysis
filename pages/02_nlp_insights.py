@@ -35,16 +35,11 @@ with st.spinner("Loading data..."):
 if df.empty:
     st.stop()
 
-# --- Sample Control for Performance ---
+# --- Analysis Settings ---
 st.sidebar.subheader("Analysis Settings")
-sample_size = st.sidebar.slider("Sample Size (for heavy NLP tasks)", 1000, 50000, 10000, step=1000)
-use_sample = st.sidebar.checkbox("Use Sample", value=False)
 use_tanaos = st.sidebar.checkbox("Use Tanaos intent model (GPU if available)", value=True)
 
-if use_sample:
-    df_analysis = df.sample(n=min(sample_size, len(df)), random_state=42)
-else:
-    df_analysis = df
+df_analysis = df
 
 # --- Ensure we have basic rule-based intents for downstream analytics ---
 with st.spinner("Categorizing intents (rule-based)..."):
@@ -136,41 +131,127 @@ if not intent_summary_df.empty:
 
 # --- Language Detection ---
 st.subheader("🌐 Multilingual Quality Analysis")
-with st.spinner("Detecting languages (sample)..."):
-    # Sample for speed
-    lang_sample = df_analysis.head(5000).copy()
-    lang_sample["Language"] = detect_language_series(lang_sample["Request"])
 
-lang_counts = lang_sample['Language'].value_counts().reset_index()
+# Sidebar toggle for LID engine
+lid_engine = st.sidebar.radio(
+    "Language Detection Engine",
+    options=["IndicLID", "Lingua"],
+    index=0,
+    help="IndicLID is best for Romanised Indian languages. Lingua is 75-language general purpose detector."
+)
+
+# IndicLID code -> human-readable name mapping
+INDICLID_LANG_NAMES = {
+    'asm_Latn': 'Assamese - Roman', 'asm_Beng': 'Assamese - Bengali',
+    'ben_Latn': 'Bengali - Roman', 'ben_Beng': 'Bengali - Bengali',
+    'brx_Latn': 'Bodo - Roman', 'brx_Deva': 'Bodo - Devanagari',
+    'doi_Deva': 'Dogri - Devanagari',
+    'guj_Latn': 'Gujarati - Roman', 'guj_Gujr': 'Gujarati - Gujarati',
+    'hin_Latn': 'Hindi - Roman', 'hin_Deva': 'Hindi - Devanagari',
+    'kan_Latn': 'Kannada - Roman', 'kan_Knda': 'Kannada - Kannada',
+    'kas_Latn': 'Kashmiri - Roman', 'kas_Arab': 'Kashmiri - Arabic', 'kas_Deva': 'Kashmiri - Devanagari',
+    'kok_Latn': 'Konkani - Roman', 'kok_Deva': 'Konkani - Devanagari',
+    'mai_Latn': 'Maithili - Roman', 'mai_Deva': 'Maithili - Devanagari',
+    'mal_Latn': 'Malayalam - Roman', 'mal_Mlym': 'Malayalam - Malayalam',
+    'mni_Latn': 'Manipuri - Roman', 'mni_Beng': 'Manipuri - Bengali', 'mni_Meti': 'Manipuri - Meetei',
+    'mar_Latn': 'Marathi - Roman', 'mar_Deva': 'Marathi - Devanagari',
+    'nep_Latn': 'Nepali - Roman', 'nep_Deva': 'Nepali - Devanagari',
+    'ori_Latn': 'Odia - Roman', 'ori_Orya': 'Odia - Oriya',
+    'pan_Latn': 'Punjabi - Roman', 'pan_Guru': 'Punjabi - Gurmukhi',
+    'san_Latn': 'Sanskrit - Roman', 'san_Deva': 'Sanskrit - Devanagari',
+    'sat_Olch': 'Santali - Ol Chiki',
+    'snd_Latn': 'Sindhi - Roman', 'snd_Arab': 'Sindhi - Arabic',
+    'tam_Latn': 'Tamil - Roman', 'tam_Tamil': 'Tamil - Tamil',
+    'tel_Latn': 'Telugu - Roman', 'tel_Telu': 'Telugu - Telugu',
+    'urd_Latn': 'Urdu - Roman', 'urd_Arab': 'Urdu - Arabic',
+    'eng_Latn': 'English', 'other': 'Other',
+}
+
+def _readable_lang(code: str) -> str:
+    # If it's already a formatted string from Lingua (e.g. "ENGLISH (ENG)"), just return it
+    if "(" in code and ")" in code:
+        return code
+    name = INDICLID_LANG_NAMES.get(code, code)
+    return f"{name} ({code})"
+
+with st.spinner(f"Detecting languages using {lid_engine}..."):
+    df_analysis["Language"] = detect_language_series(df_analysis["Request"], engine=lid_engine)
+
+lang_counts = df_analysis['Language'].value_counts().reset_index()
 lang_counts.columns = ['Language', 'Count']
+lang_counts['Label'] = lang_counts['Language'].apply(_readable_lang)
 
-lang_quality_df = language_quality_summary(lang_sample)
+lang_quality_df = language_quality_summary(df_analysis)
+if not lang_quality_df.empty:
+    lang_quality_df['Label'] = lang_quality_df['Language'].apply(_readable_lang)
 
-l1, l2 = st.columns(2)
+total_langs = len(lang_counts)
+show_k = st.sidebar.slider(
+    "Languages to show in distribution",
+    min_value=1, max_value=max(total_langs, 1), value=total_langs, step=1,
+)
+
+l1, l2 = st.columns([3, 2])
 with l1:
-    fig_lang = px.pie(lang_counts.head(10), values='Count', names='Language', title="Language Distribution (Top 10)", hole=0.4)
+    pie_data = lang_counts.head(show_k)
+    title_suffix = f"(Top {show_k})" if show_k < total_langs else "(All)"
+    total_count = int(pie_data['Count'].sum())
+    # Only show percentage text on slices >= 2% so small ones stay clean
+    pct_threshold = 0.02
+    text_info = []
+    for _, row in pie_data.iterrows():
+        if row['Count'] / total_count >= pct_threshold:
+            text_info.append(f"{row['Count'] / total_count * 100:.1f}%")
+        else:
+            text_info.append("")
+    fig_lang = px.pie(
+        pie_data, values='Count', names='Label',
+        title=f"Language Distribution {title_suffix}", hole=0.4,
+    )
+    fig_lang.update_traces(
+        text=text_info,
+        textposition='outside',
+        textinfo='text',
+        hoverinfo='label+percent+value',
+    )
+    fig_lang.update_layout(
+        showlegend=False,
+        margin=dict(t=40, b=10, l=10, r=10),
+    )
     st.plotly_chart(fig_lang, width='stretch')
 
 with l2:
-    if not lang_quality_df.empty:
-        fig_lang_quality = px.bar(
-            lang_quality_df,
-            x='Language',
-            y='Resolution_Rate',
-            color='Avg_Conv_Frustration',
-            title="Resolution Rate & Frustration by Language",
-            color_continuous_scale='Reds',
-        )
-        st.plotly_chart(fig_lang_quality, width='stretch')
-    else:
-        st.info("Not enough data to compute language quality metrics.")
+    # Table with all languages, counts, and percentages
+    total_all = int(lang_counts['Count'].sum())
+    table_df = lang_counts.head(show_k)[['Label', 'Count']].copy()
+    table_df['Percentage'] = (table_df['Count'] / total_all * 100).round(3).astype(str) + '%'
+    table_df = table_df.rename(columns={'Label': 'Language'})
+    st.dataframe(table_df, width='stretch', hide_index=True, height=min(400, 35 * len(table_df) + 40))
 
-st.caption("Below are sample non-English requests detected in the analysis sample.")
-hindi_samples = lang_sample[lang_sample['Language'].isin(['hi', 'mr', 'ta', 'te', 'bn'])]
-if not hindi_samples.empty:
-    st.dataframe(hindi_samples[['Request', 'Language']].head(10), width='stretch')
+# Frustration chart full-width below
+if not lang_quality_df.empty:
+    fig_frust = px.bar(
+        lang_quality_df,
+        x='Label',
+        y='Avg_Conv_Frustration',
+        color='Count',
+        title="Average Frustration by Language",
+        color_continuous_scale='Blues',
+        labels={'Label': 'Language', 'Avg_Conv_Frustration': 'Avg Frustration (0-1)'},
+    )
+    fig_frust.update_layout(xaxis_tickangle=-45)
+    st.plotly_chart(fig_frust, width='stretch')
 else:
-    st.info("No non-English requests detected in sample.")
+    st.info("Not enough data to compute language quality metrics.")
+
+st.caption("Below are sample non-English requests detected in the data.")
+non_english = df_analysis[~df_analysis['Language'].isin(['eng_Latn', 'other'])]
+if not non_english.empty:
+    display_ne = non_english[['Request', 'Language']].copy()
+    display_ne['Language'] = display_ne['Language'].apply(_readable_lang)
+    st.dataframe(display_ne.head(20), width='stretch')
+else:
+    st.info("No non-English requests detected.")
 
 # --- User Feedback Sentiment ---
 st.subheader("📝 User Feedback Sentiment")
@@ -267,7 +348,7 @@ if len(feature_cols) >= 2 and len(df_analysis) >= 10:
     # slightly larger markers and improved layout for dashboard readability
     fig_3d.update_traces(marker=dict(size=6))
     fig_3d.update_layout(margin=dict(l=0, r=0, t=60, b=0))
-    st.plotly_chart(fig_3d, use_container_width=True, height=720)
+    st.plotly_chart(fig_3d, width='stretch', height=720)
 
     # --- Small details panel (left) showing selected point details ---
     # Streamlit does not provide native hover callbacks for Plotly charts, so
