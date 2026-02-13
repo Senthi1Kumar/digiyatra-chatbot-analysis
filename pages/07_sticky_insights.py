@@ -3,7 +3,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from src.data_loader import get_session_data
 from src.preprocessing import preprocess_data
-from src.nlp_analytics import categorise_intent_basic
+from src.nlp_analytics import categorise_intent_semantic
 from src.sticky_analytics import extract_topics_nmf, generate_sankey_data, analyze_friction
 
 st.set_page_config(page_title="Sticky Insights - DigiYatra", page_icon="🧲", layout="wide")
@@ -19,9 +19,10 @@ with st.spinner("Crunching advanced data..."):
         st.stop()
     df = preprocess_data(df)
     
-    # Ensure Intent exists (using your basic rule-based one first)
+    # Ensure Intent exists (using semantic classifier now)
     if 'Intent' not in df.columns:
-        df['Intent'] = df['Request'].apply(categorise_intent_basic)
+        with st.spinner("Classifying intents using Semantic Model..."):
+            df['Intent'] = df['Request'].apply(categorise_intent_semantic)
 
 # --- Section 1: Dynamic Topic Modeling (NMF) ---
 st.header("1. Beyond Rules: Discovering Hidden Topics")
