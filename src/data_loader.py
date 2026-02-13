@@ -43,7 +43,7 @@ def load_data(file_path: str = None) -> pd.DataFrame:
             )
             .with_columns(
                 pl.col("Timestamp")
-                .str.strptime(pl.Datetime, format="%d/%m/%Y, %H:%M:%S", strict=False)
+                .str.strptime(pl.Datetime, format="%m/%d/%Y, %I:%M:%S %p", strict=False)
                 .alias("Timestamp")
             )
             .sort("Timestamp")
