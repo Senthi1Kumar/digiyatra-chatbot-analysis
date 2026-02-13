@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from textblob import TextBlob
 import re
-from langdetect import detect, LangDetectException
+# from langdetect import detect, LangDetectException
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import pairwise_distances_argmin_min
 import torch
@@ -13,6 +13,27 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from pathlib import Path
 
 _indiclid_model = None
+_lingua_detector = None
+
+
+def _get_lingua_detector():
+    """
+    Lazy-load Lingua language detector.
+    Includes all supported languages in high-accuracy mode by default.
+    """
+    global _lingua_detector
+    if _lingua_detector is not None:
+        return _lingua_detector
+
+    import logging
+    try:
+        from lingua import LanguageDetectorBuilder
+        # Using all languages for maximum coverage
+        _lingua_detector = LanguageDetectorBuilder.from_all_languages().build()
+        return _lingua_detector
+    except Exception as e:
+        logging.error(f"Lingua initialization failed: {e}")
+        return None
 
 
 def _get_indiclid_model():
@@ -50,73 +71,106 @@ def _get_indiclid_model():
             return None
 
 
-def _langdetect_fallback(text: str) -> str:
-    try:
-        if not isinstance(text, str) or len(text.strip()) < 3:
-            return "unknown"
-        return detect(text)
-    except LangDetectException:
-        return "unknown"
-    except Exception:
-        return "unknown"
+
+# def _langdetect_fallback(text: str) -> str:
+#     try:
+#         if not isinstance(text, str) or len(text.strip()) < 3:
+#             return "unknown"
+#         return detect(text)
+#     except LangDetectException:
+#         return "unknown"
+#     except Exception:
+#         return "unknown"
 
 
-def detect_language(text: str) -> str:
+# Minimum character length for IndicLID to produce reliable results.
+# Shorter texts (greetings like "hi", "ok") get random Indic labels.
+_INDICLID_MIN_LENGTH = 5
+
+# Confidence thresholds removed as requested to use IndicLID by default without fallback.
+
+# --- Lingua ISO Mapping ---
+# Maps Lingua ISO-639-3 or ISO-639-1 names/codes to human-readable labels if needed.
+# Lingua's Language object has .name (e.g., 'ENGLISH', 'HINDI')
+# and ISO codes (e.g., .iso_code_639_1.name -> 'EN', .iso_code_639_3.name -> 'HIN')
+
+def detect_language(text: str, engine: str = "IndicLID") -> str:
     """
-    Detect language of a single text using IndicLID when available,
-    otherwise langdetect.
-
-    Returns an IndicLID code (e.g. 'hin_Latn') or ISO code (e.g. 'en') or 'unknown'.
+    Detect language of a single text using the specified engine.
+    
+    Engines:
+    - "IndicLID": Best for Indian languages (Standard + Romanised)
+    - "Lingua": Best for general multi-language support (75 languages)
     """
     if not isinstance(text, str) or len(text.strip()) < 1:
         return "unknown"
 
     import logging
+    cleaned = text.strip()
+
+    if engine == "Lingua":
+        detector = _get_lingua_detector()
+        if detector is not None:
+            try:
+                lang = detector.detect_language_of(cleaned)
+                if lang:
+                    return f"{lang.name} ({lang.iso_code_639_3.name})"
+                return "unknown"
+            except Exception as e:
+                logging.error(f"Lingua detection failed: {e}")
+        return "unknown"
+
+    # Default: IndicLID
     model = _get_indiclid_model()
     if model is not None:
         try:
-            outputs = model.batch_predict([text.strip()], batch_size=1)
+            outputs = model.batch_predict([cleaned], batch_size=1)
             if outputs:
-                # Each output is (text, label, score, model_name)
                 _, label, *_ = outputs[0]
                 return label or "unknown"
-            else:
-                logging.warning(f"IndicLID batch_predict returned empty output for text: {text}")
         except Exception as e:
-            logging.error(f"IndicLID batch_predict failed for text: {text} with error: {e}")
+            logging.error(f"IndicLID batch_predict failed: {e}")
 
-    logging.info(f"Falling back to langdetect for text: {text}")
-    return _langdetect_fallback(text)
+    return "unknown"
 
 
-def detect_language_series(text_series: pd.Series) -> pd.Series:
+def detect_language_series(text_series: pd.Series, engine: str = "IndicLID") -> pd.Series:
     """
     Vectorised language detection over a pandas Series.
-
-    Uses IndicLID's batch_predict when available for efficiency,
-    otherwise falls back to langdetect per row.
     """
     if text_series.empty:
         return text_series.copy()
 
     import logging
-    model = _get_indiclid_model()
     texts = text_series.fillna("").astype(str)
+    labels = pd.Series("unknown", index=texts.index)
 
+    if engine == "Lingua":
+        detector = _get_lingua_detector()
+        if detector is not None:
+            try:
+                # Use list comprehension for compatibility if parallel method is missing
+                results = [detector.detect_language_of(t) for t in texts.tolist()]
+                labels = pd.Series([
+                    f"{r.name} ({r.iso_code_639_3.name})" if r else "unknown" 
+                    for r in results
+                ], index=texts.index)
+            except Exception as e:
+                logging.error(f"Lingua series detection failed: {e}")
+        return labels
+
+    # Default: IndicLID
+    model = _get_indiclid_model()
     if model is not None:
         try:
             outputs = model.batch_predict(texts.tolist(), batch_size=64)
-            # outputs: list of (text, label, score, model_name)
-            if not outputs or len(outputs) != len(texts):
-                logging.warning(f"IndicLID batch_predict returned {len(outputs)} outputs for {len(texts)} inputs.")
-            labels = [o[1] if len(o) >= 2 and o[1] else "unknown" for o in outputs]
-            return pd.Series(labels, index=texts.index)
+            if outputs and len(outputs) == len(texts):
+                labels = pd.Series([o[1] if o[1] else "unknown" for o in outputs], index=texts.index)
         except Exception as e:
-            logging.error(f"IndicLID batch_predict failed for series with error: {e}")
+            logging.error(f"IndicLID batch_predict failed for series: {e}")
 
-    logging.info("Falling back to langdetect for language detection series.")
-    # Fallback: langdetect per row
-    return texts.apply(_langdetect_fallback)
+    return labels
+
 
 def parse_user_feedback(feedback_str: str) -> dict:
     """
@@ -245,14 +299,14 @@ def analyze_sentiment(df: pd.DataFrame, text_col: str = "Request") -> pd.DataFra
 
     df[["Sentiment_Polarity", "Sentiment_Subjectivity"]] = df[text_col].apply(get_sentiment)
 
-    # Optional Indic sentiment
-    tok, model, device = _get_indic_sentiment_model()
-    if tok is not None and model is not None:
-        texts = df[text_col].astype(str).tolist()
-        labels, scores = _indic_sentiment_batch(texts)
-        if labels and len(labels) == len(df):
-            df["Indic_Sentiment_Label"] = labels
-            df["Indic_Sentiment_Score"] = scores
+    # IndicBERT sentiment model is disabled for now
+    # tok, model, device = _get_indic_sentiment_model()
+    # if tok is not None and model is not None:
+    #     texts = df[text_col].astype(str).tolist()
+    #     labels, scores = _indic_sentiment_batch(texts)
+    #     if labels and len(labels) == len(df):
+    #         df["Indic_Sentiment_Label"] = labels
+    #         df["Indic_Sentiment_Score"] = scores
 
     return df
 
@@ -705,7 +759,7 @@ def compute_chat_duration_metrics(
 
     tmp = df[[c for c in [conv_id_col, user_id_col, timestamp_col] if c in df.columns]].copy()
     if not np.issubdtype(tmp[timestamp_col].dtype, np.datetime64):
-        tmp[timestamp_col] = pd.to_datetime(tmp[timestamp_col], errors="coerce")
+        tmp[timestamp_col] = pd.to_datetime(tmp[timestamp_col], format='%m/%d/%Y, %I:%M:%S %p', errors="coerce")
 
     tmp = tmp.dropna(subset=[timestamp_col])
     if tmp.empty:
@@ -951,3 +1005,192 @@ def cluster_unseen_queries(
         )
 
     return pd.DataFrame(rows).sort_values("Size", ascending=False)
+
+
+# --- Semantic Intent Classification ---
+
+_semantic_model = None
+_intent_prototypes = None
+_intent_embeddings = None
+
+def _get_semantic_model():
+    """
+    Lazy-load sentence-transformers model.
+    """
+    global _semantic_model
+    if _semantic_model is not None:
+        return _semantic_model
+    
+    try:
+        from sentence_transformers import SentenceTransformer
+        # 'all-MiniLM-L6-v2' is fast and effective
+        _semantic_model = SentenceTransformer('all-MiniLM-L6-v2') 
+        return _semantic_model
+    except ImportError:
+        print("sentence-transformers not installed. Falling back to None.")
+        return None
+    except Exception as e:
+        print(f"Error loading semantic model: {e}")
+        return None
+
+def _get_intent_embeddings():
+    """
+    Define and embed intent prototypes.
+    """
+    global _intent_prototypes, _intent_embeddings
+    
+    if _intent_embeddings is not None:
+        return _intent_prototypes, _intent_embeddings
+
+    model = _get_semantic_model()
+    if model is None:
+        return {}, None
+
+    # Define prototypes - mapping intent label to a descriptive sentence
+    # We can have multiple prototypes per intent for better coverage
+    prototypes_map = {
+        "OTP/Login Issue": [
+            "I cannot receive the OTP code for login.",
+            "My SMS code is not arriving.",
+            "I am unable to sign in to the app.",
+            "Problem logging into my account."
+        ],
+        "Registration Issue": [
+            "I cannot register on the app.",
+            "Sign up process is failing.",
+            "Error during registration step.",
+            "I am unable to create a new account."
+        ],
+        "Boarding Pass Issue": [
+            "I cannot upload my boarding pass.",
+            "My flight details are not fetching.",
+            "Scanning the barcode failed.",
+            "Boarding pass upload error."
+        ],
+        "Face Verification": [
+            "My face verification failed.",
+            "Selfie upload is not working.",
+            "Facial recognition rejected my photo.",
+            "I cannot verify my identity with the camera."
+        ],
+        "Airport/Gate": [
+            "Where is the DigiYatra gate?",
+            "Which entry gate should I use at the airport?",
+            "Is security check faster with DigiYatra?",
+            "Airport terminal and gate information."
+        ],
+        "Technical Issue": [
+            "The app keeps crashing.",
+            "I am facing a bug or error in the app.",
+            "The application is very slow and lagging.",
+            "It is not working on my iPhone or Android."
+        ],
+        "Dependent/Minor": [
+            "How do I add my child or kid?",
+            "Can I travel with my minor dependent?",
+            "Adding a family member to the app.",
+            "Travelling with an infant."
+        ],
+        "Feedback/Complaint": [
+            "I am very frustrated with this service.",
+            "This is a terrible experience.",
+            "Great app, works well.",
+            "I want to complain about the delay."
+        ],
+        "General Query": [
+            "What is DigiYatra?",
+            "How does this work?",
+            "Is it mandatory?",
+            "General information about the service."
+        ]
+    }
+    
+    # Flatten for embedding
+    flat_prototypes = []
+    flat_labels = []
+    
+    for label, sentences in prototypes_map.items():
+        for s in sentences:
+            flat_prototypes.append(s)
+            flat_labels.append(label)
+            
+    _intent_prototypes = flat_labels
+    _intent_embeddings = model.encode(flat_prototypes, convert_to_tensor=True)
+    
+    return _intent_prototypes, _intent_embeddings
+
+def categorise_intent_semantic(text):
+    """
+    Classify intent using semantic similarity.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return "Unknown"
+        
+    model = _get_semantic_model()
+    if model is None:
+        return categorise_intent_basic(text) # Fallback
+        
+    try:
+        from sentence_transformers import util
+        # Ensure embeddings are ready
+        prototypes, embeddings = _get_intent_embeddings()
+        
+        # Embed input
+        query_embedding = model.encode(text, convert_to_tensor=True)
+        
+        # Compute cosine similarity
+        hits = util.semantic_search(query_embedding, embeddings, top_k=1)
+        
+        if hits and hits[0]:
+            best_hit = hits[0][0] # {corpus_id, score}
+            best_idx = best_hit['corpus_id']
+            score = best_hit['score']
+            
+            # Threshold?
+            if score > 0.35: # Reasonable threshold for MiniLM
+                return prototypes[best_idx]
+            else:
+                return "General/Other"
+        
+        return "General/Other"
+        
+    except Exception as e:
+        print(f"Semantic classification error: {e}")
+        return categorise_intent_basic(text)
+
+def categorise_intent_semantic_batch(texts):
+    """
+    Batch classify intents.
+    """
+    model = _get_semantic_model()
+    if model is None:
+        return [categorise_intent_basic(t) for t in texts]
+        
+    try:
+        from sentence_transformers import util
+        prototypes, embeddings = _get_intent_embeddings()
+        
+        # Embed all texts
+        # Clean nulls
+        clean_texts = [str(t) if not pd.isna(t) else "" for t in texts]
+        query_embeddings = model.encode(clean_texts, convert_to_tensor=True)
+        
+        # Search
+        hits = util.semantic_search(query_embeddings, embeddings, top_k=1)
+        
+        results = []
+        for hit in hits:
+            if hit:
+                best_hit = hit[0]
+                if best_hit['score'] > 0.35:
+                    results.append(prototypes[best_hit['corpus_id']])
+                else:
+                    results.append("General/Other")
+            else:
+                results.append("General/Other")
+                
+        return results
+        
+    except Exception as e:
+        print(f"Batch semantic classification error: {e}")
+        return [categorise_intent_basic(t) for t in texts]
