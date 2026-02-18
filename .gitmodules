@@ -1,3 +1,3 @@
 [submodule "IndicLID"]
 	path = IndicLID
-	url = https://github.com/AI4Bharat/IndicLID.git
+	url = git@github.com:Senthi1Kumar/IndicLID.git
