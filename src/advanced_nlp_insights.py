@@ -8,7 +8,7 @@ warnings.filterwarnings('ignore')
 
 
 # ============================================================================
-# 1. INTELLIGENT INTENT CLASSIFICATION (Hybrid Approach)
+# 1. INTENT CLASSIFICATION (Hybrid Approach)
 # ============================================================================
 
 class IntentClassifier:
