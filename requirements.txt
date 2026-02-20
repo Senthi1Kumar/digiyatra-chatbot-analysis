@@ -8,3 +8,5 @@ plotly
 textblob
 # wordcloud
 langdetect
+fastapi[standard]
+pydantic
